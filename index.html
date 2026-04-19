@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arturo's 9 EMA vs VWAP Strategy</title>
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0f14;
+      --surface:   #151820;
+      --border:    #1e2330;
+      --text:      #c9d1e0;
+      --text-muted:#6b7a99;
+      --accent:    #3d7eff;
+      --green:     #26a69a;
+      --red:       #ef5350;
+      --orange:    #ff9800;
+      --blue:      #42a5f5;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 13px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    header h1 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #e8eaf0;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    header h1 span {
+      color: var(--orange);
+    }
+
+    .header-sep { color: var(--border); }
+
+    .ticker-form {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .ticker-form label {
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .ticker-form input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 5px 10px;
+      border-radius: 4px;
+      width: 90px;
+      text-transform: uppercase;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .ticker-form input:focus {
+      border-color: var(--accent);
+    }
+
+    .btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 5px 14px;
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .btn:hover { opacity: 0.85; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .refresh-info {
+      color: var(--text-muted);
+      font-size: 11px;
+      white-space: nowrap;
+      margin-left: auto;
+    }
+
+    /* ── MAIN LAYOUT ── */
+    main {
+      display: flex;
+      flex: 1;
+      gap: 0;
+      overflow: hidden;
+    }
+
+    /* ── SIGNAL PANEL ── */
+    #signal-panel {
+      width: 240px;
+      min-width: 240px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      overflow-y: auto;
+    }
+
+    .panel-section {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-section h3 {
+      color: var(--text-muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      margin-bottom: 12px;
+    }
+
+    /* Signal badge */
+    #signal-badge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px;
+      background: var(--bg);
+      border-radius: 6px;
+    }
+
+    #signal-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #555;
+      flex-shrink: 0;
+      transition: background 0.4s;
+    }
+
+    #signal-dot.long  { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    #signal-dot.short { background: var(--red);   box-shadow: 0 0 8px var(--red);   }
+    #signal-dot.neutral { background: #555; box-shadow: none; }
+
+    #signal-label {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: #e8eaf0;
+      transition: color 0.4s;
+    }
+
+    #signal-label.long  { color: var(--green); }
+    #signal-label.short { color: var(--red);   }
+
+    /* Stats grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .stat {
+      background: var(--bg);
+      border-radius: 5px;
+      padding: 10px;
+    }
+
+    .stat-label {
+      color: var(--text-muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: #e8eaf0;
+    }
+
+    .stat-value.ema-color  { color: var(--orange); }
+    .stat-value.vwap-color { color: var(--blue); }
+
+    /* Last signal */
+    .last-signal-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .last-sig-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg);
+      border-radius: 4px;
+      padding: 8px 10px;
+    }
+
+    .last-sig-item .sig-dir {
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    .sig-dir.long  { color: var(--green); }
+    .sig-dir.short { color: var(--red);   }
+
+    .sig-time {
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    /* Status bar */
+    #status-bar {
+      padding: 10px 16px;
+      color: var(--text-muted);
+      font-size: 11px;
+      border-bottom: 1px solid var(--border);
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #status-bar.error { color: var(--red); }
+    #status-bar.ok    { color: var(--green); }
+
+    /* ── CHART AREA ── */
+    #chart-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #chart-container {
+      flex: 1;
+      position: relative;
+    }
+
+    #chart {
+      width: 100%;
+      height: 100%;
+    }
+
+    #loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(13,15,20,0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      color: var(--text-muted);
+      font-size: 13px;
+      z-index: 10;
+      transition: opacity 0.3s;
+    }
+
+    #loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── LEGEND ── */
+    #legend {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 8px 16px;
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .legend-line {
+      width: 24px;
+      height: 2px;
+      border-radius: 1px;
+    }
+
+    .legend-marker {
+      font-size: 13px;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 700px) {
+      main { flex-direction: column; }
+
+      #signal-panel {
+        width: 100%;
+        min-width: unset;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        flex-direction: row;
+        flex-wrap: wrap;
+        overflow-y: visible;
+      }
+
+      .panel-section {
+        flex: 1;
+        min-width: 160px;
+        border-bottom: none;
+        border-right: 1px solid var(--border);
+      }
+
+      .panel-section:last-child { border-right: none; }
+
+      #chart-container { min-height: 350px; }
+    }
+
+    @media (max-width: 480px) {
+      header h1 { font-size: 13px; }
+      .ticker-form input { width: 70px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════ HEADER ═══════════════════════════ -->
+<header>
+  <h1>Arturo's <span>9 EMA</span> vs VWAP Strategy</h1>
+  <span class="header-sep">|</span>
+  <form class="ticker-form" id="ticker-form" onsubmit="return false;">
+    <label for="ticker-input">Ticker:</label>
+    <input id="ticker-input" type="text" value="SPY" maxlength="10" spellcheck="false" autocomplete="off" />
+    <button class="btn" id="load-btn" onclick="loadSymbol()">Load</button>
+  </form>
+  <div class="refresh-info" id="refresh-info">Auto-refresh every 60s</div>
+</header>
+
+<!-- ═══════════════════════════ MAIN ═══════════════════════════ -->
+<main>
+
+  <!-- SIGNAL PANEL -->
+  <aside id="signal-panel">
+
+    <div id="status-bar">Waiting for data…</div>
+
+    <!-- Current signal -->
+    <div class="panel-section">
+      <h3>Current Signal</h3>
+      <div id="signal-badge">
+        <div id="signal-dot" class="neutral"></div>
+        <div id="signal-label">NEUTRAL</div>
+      </div>
+    </div>
+
+    <!-- Price stats -->
+    <div class="panel-section">
+      <h3>Live Values</h3>
+      <div class="stats-grid">
+        <div class="stat">
+          <div class="stat-label">Price</div>
+          <div class="stat-value" id="val-price">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">9 EMA</div>
+          <div class="stat-value ema-color" id="val-ema">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">VWAP</div>
+          <div class="stat-value vwap-color" id="val-vwap">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">EMA − VWAP</div>
+          <div class="stat-value" id="val-diff">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Last signals -->
+    <div class="panel-section">
+      <h3>Recent Signals</h3>
+      <div class="last-signal-row" id="signals-list">
+        <div style="color:var(--text-muted);font-size:11px;">No signals yet</div>
+      </div>
+    </div>
+
+    <!-- Strategy info -->
+    <div class="panel-section">
+      <h3>Strategy Rules</h3>
+      <div style="color:var(--text-muted);font-size:11px;line-height:1.7;">
+        <div>Timeframe: <span style="color:var(--text)">5-min</span></div>
+        <div>EMA period: <span style="color:var(--orange)">9</span></div>
+        <div>VWAP reset: <span style="color:var(--text)">daily</span></div>
+        <div style="margin-top:8px;color:var(--green)">▲ LONG — EMA crosses above VWAP</div>
+        <div style="color:var(--red)">▼ SHORT — EMA crosses below VWAP</div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- CHART AREA -->
+  <div id="chart-wrap">
+    <div id="chart-container">
+      <div id="chart"></div>
+      <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div id="loading-text">Loading chart data…</div>
+      </div>
+    </div>
+    <div id="legend">
+      <div class="legend-item">
+        <div class="legend-line" style="background:#26a69a;"></div> Candles
+      </div>
+      <div class="legend-item">
+        <div class="legend-line" style="background:#42a5f5;"></div> VWAP
+      </div>
+      <div class="legend-item">
+        <div class="legend-line" style="background:#ff9800;"></div> 9 EMA
+      </div>
+      <div class="legend-item">
+        <span class="legend-marker" style="color:#26a69a;">▲</span> Long signal
+      </div>
+      <div class="legend-item">
+        <span class="legend-marker" style="color:#ef5350;">▼</span> Short signal
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ═══════════════════════════ SCRIPT ═══════════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  // ─── CONFIG ───────────────────────────────────────────────────
+  const CORS_PROXY  = 'https://corsproxy.io/?';
+  const YF_BASE     = 'https://query1.finance.yahoo.com/v8/finance/chart/';
+  const EMA_PERIOD  = 9;
+  const REFRESH_MS  = 60_000;
+
+  // ─── STATE ────────────────────────────────────────────────────
+  let chart, candleSeries, emaSeries, vwapSeries;
+  let refreshTimer = null;
+  let currentSymbol = 'SPY';
+  let signalHistory = [];
+
+  // ─── DOM REFS ─────────────────────────────────────────────────
+  const chartEl       = document.getElementById('chart');
+  const loadingEl     = document.getElementById('loading-overlay');
+  const loadingText   = document.getElementById('loading-text');
+  const statusBar     = document.getElementById('status-bar');
+  const signalDot     = document.getElementById('signal-dot');
+  const signalLabel   = document.getElementById('signal-label');
+  const valPrice      = document.getElementById('val-price');
+  const valEma        = document.getElementById('val-ema');
+  const valVwap       = document.getElementById('val-vwap');
+  const valDiff       = document.getElementById('val-diff');
+  const signalsList   = document.getElementById('signals-list');
+  const refreshInfo   = document.getElementById('refresh-info');
+  const tickerInput   = document.getElementById('ticker-input');
+  const loadBtn       = document.getElementById('load-btn');
+
+  // ─── CHART INIT ───────────────────────────────────────────────
+  function initChart() {
+    chart = LightweightCharts.createChart(chartEl, {
+      layout: {
+        background: { type: 'solid', color: '#0d0f14' },
+        textColor: '#6b7a99',
+      },
+      grid: {
+        vertLines: { color: '#1a1e2a' },
+        horzLines: { color: '#1a1e2a' },
+      },
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Normal,
+        vertLine: { color: '#3d4860', width: 1, style: 1 },
+        horzLine: { color: '#3d4860', width: 1, style: 1 },
+      },
+      rightPriceScale: {
+        borderColor: '#1e2330',
+      },
+      timeScale: {
+        borderColor: '#1e2330',
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      handleScroll: true,
+      handleScale: true,
+    });
+
+    // Resize observer
+    const ro = new ResizeObserver(() => {
+      chart.applyOptions({
+        width: chartEl.clientWidth,
+        height: chartEl.clientHeight,
+      });
+    });
+    ro.observe(chartEl);
+
+    // Initial size
+    chart.applyOptions({
+      width: chartEl.clientWidth,
+      height: chartEl.clientHeight,
+    });
+
+    candleSeries = chart.addCandlestickSeries({
+      upColor:        '#26a69a',
+      downColor:      '#ef5350',
+      borderUpColor:  '#26a69a',
+      borderDownColor:'#ef5350',
+      wickUpColor:    '#26a69a',
+      wickDownColor:  '#ef5350',
+    });
+
+    vwapSeries = chart.addLineSeries({
+      color:     '#42a5f5',
+      lineWidth: 2,
+      title:     'VWAP',
+    });
+
+    emaSeries = chart.addLineSeries({
+      color:     '#ff9800',
+      lineWidth: 2,
+      title:     '9 EMA',
+    });
+  }
+
+  // ─── CALCULATIONS ─────────────────────────────────────────────
+
+  // Standard 9-EMA
+  function calcEMA(values, period) {
+    const k = 2 / (period + 1);
+    const result = new Array(values.length).fill(null);
+    let ema = null;
+    for (let i = 0; i < values.length; i++) {
+      if (values[i] === null || values[i] === undefined) continue;
+      if (ema === null) {
+        // seed with first available value
+        ema = values[i];
+      } else {
+        ema = values[i] * k + ema * (1 - k);
+      }
+      result[i] = ema;
+    }
+    return result;
+  }
+
+  // VWAP — cumulative, resets at start of each trading day
+  // typical price = (H+L+C)/3
+  function calcVWAP(bars) {
+    const result = new Array(bars.length).fill(null);
+    let cumPV = 0, cumV = 0;
+    let lastDate = null;
+
+    for (let i = 0; i < bars.length; i++) {
+      const b = bars[i];
+      // Extract date string (YYYY-MM-DD) for daily reset
+      const d = new Date(b.time * 1000);
+      const dateStr = d.toISOString().slice(0, 10);
+
+      if (dateStr !== lastDate) {
+        cumPV = 0;
+        cumV  = 0;
+        lastDate = dateStr;
+      }
+
+      const tp = (b.high + b.low + b.close) / 3;
+      cumPV += tp * b.volume;
+      cumV  += b.volume;
+      result[i] = cumV > 0 ? cumPV / cumV : null;
+    }
+    return result;
+  }
+
+  // Detect crosses: returns array of {index, direction}
+  function detectCrosses(emaArr, vwapArr) {
+    const crosses = [];
+    for (let i = 1; i < emaArr.length; i++) {
+      const prevE = emaArr[i - 1], prevV = vwapArr[i - 1];
+      const curE  = emaArr[i],     curV  = vwapArr[i];
+      if (prevE === null || prevV === null || curE === null || curV === null) continue;
+
+      const wasBelowOrEqual = prevE <= prevV;
+      const isAbove          = curE  >  curV;
+      const wasAboveOrEqual  = prevE >= prevV;
+      const isBelow          = curE  <  curV;
+
+      if (wasBelowOrEqual && isAbove) {
+        crosses.push({ index: i, direction: 'LONG' });
+      } else if (wasAboveOrEqual && isBelow) {
+        crosses.push({ index: i, direction: 'SHORT' });
+      }
+    }
+    return crosses;
+  }
+
+  // ─── DATA FETCH ───────────────────────────────────────────────
+  async function fetchData(symbol) {
+    const url = `${YF_BASE}${encodeURIComponent(symbol)}?interval=5m&range=1d`;
+
+    // Try direct first, then via CORS proxy
+    const endpoints = [
+      url,
+      `${CORS_PROXY}${encodeURIComponent(url)}`,
+    ];
+
+    let lastErr = null;
+    for (const endpoint of endpoints) {
+      try {
+        const res = await fetch(endpoint, {
+          headers: { 'Accept': 'application/json' },
+          cache: 'no-store',
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        return parseYahooResponse(json);
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr;
+  }
+
+  function parseYahooResponse(json) {
+    const result = json?.chart?.result?.[0];
+    if (!result) throw new Error('No data returned from Yahoo Finance');
+
+    const meta       = result.meta;
+    const timestamps = result.timestamp;
+    const q          = result.indicators?.quote?.[0];
+    const adjClose   = result.indicators?.adjclose?.[0]?.adjclose;
+
+    if (!timestamps || !q) throw new Error('Incomplete data from Yahoo Finance');
+
+    const bars = [];
+    for (let i = 0; i < timestamps.length; i++) {
+      if (
+        q.open[i]   == null || q.high[i]  == null ||
+        q.low[i]    == null || q.close[i] == null ||
+        q.volume[i] == null
+      ) continue;
+
+      bars.push({
+        time:   timestamps[i],
+        open:   parseFloat(q.open[i].toFixed(4)),
+        high:   parseFloat(q.high[i].toFixed(4)),
+        low:    parseFloat(q.low[i].toFixed(4)),
+        close:  parseFloat(q.close[i].toFixed(4)),
+        volume: q.volume[i],
+      });
+    }
+
+    if (bars.length === 0) throw new Error('No valid bars returned');
+    return { bars, symbol: meta.symbol };
+  }
+
+  // ─── RENDER ───────────────────────────────────────────────────
+  function renderChart(bars) {
+    // Candlestick data
+    const candleData = bars.map(b => ({
+      time:  b.time,
+      open:  b.open,
+      high:  b.high,
+      low:   b.low,
+      close: b.close,
+    }));
+
+    // Indicators
+    const closes  = bars.map(b => b.close);
+    const emaVals = calcEMA(closes, EMA_PERIOD);
+    const vwapVals = calcVWAP(bars);
+
+    const emaData = emaVals.map((v, i) =>
+      v !== null ? { time: bars[i].time, value: parseFloat(v.toFixed(4)) } : null
+    ).filter(Boolean);
+
+    const vwapData = vwapVals.map((v, i) =>
+      v !== null ? { time: bars[i].time, value: parseFloat(v.toFixed(4)) } : null
+    ).filter(Boolean);
+
+    // Crosses → markers
+    const crosses = detectCrosses(emaVals, vwapVals);
+    const markers = crosses.map(c => ({
+      time:     bars[c.index].time,
+      position: c.direction === 'LONG' ? 'belowBar' : 'aboveBar',
+      color:    c.direction === 'LONG' ? '#26a69a'  : '#ef5350',
+      shape:    c.direction === 'LONG' ? 'arrowUp'  : 'arrowDown',
+      text:     c.direction,
+      size:     1.5,
+    }));
+
+    // Update series
+    candleSeries.setData(candleData);
+    emaSeries.setData(emaData);
+    vwapSeries.setData(vwapData);
+    candleSeries.setMarkers(markers);
+
+    chart.timeScale().fitContent();
+
+    // Update signal panel
+    const lastIdx   = bars.length - 1;
+    const lastEma   = emaVals[lastIdx];
+    const lastVwap  = vwapVals[lastIdx];
+    const lastClose = bars[lastIdx].close;
+
+    updatePanel(lastClose, lastEma, lastVwap, crosses, bars);
+
+    // Update signal history
+    signalHistory = crosses.map(c => ({
+      direction: c.direction,
+      time: new Date(bars[c.index].time * 1000),
+      price: bars[c.index].close,
+    })).reverse().slice(0, 6);
+
+    renderSignalHistory();
+  }
+
+  function updatePanel(price, ema, vwap, crosses, bars) {
+    // Determine current market state
+    let currentSig = 'NEUTRAL';
+    if (ema !== null && vwap !== null) {
+      currentSig = ema > vwap ? 'LONG' : ema < vwap ? 'SHORT' : 'NEUTRAL';
+    }
+
+    // Signal badge
+    signalDot.className   = currentSig.toLowerCase();
+    signalLabel.className = currentSig.toLowerCase();
+    signalLabel.textContent = currentSig;
+
+    // Values
+    valPrice.textContent = price != null ? '$' + price.toFixed(2) : '—';
+    valEma.textContent   = ema   != null ? ema.toFixed(2)         : '—';
+    valVwap.textContent  = vwap  != null ? vwap.toFixed(2)        : '—';
+
+    if (ema !== null && vwap !== null) {
+      const diff = ema - vwap;
+      valDiff.textContent = (diff >= 0 ? '+' : '') + diff.toFixed(2);
+      valDiff.style.color = diff >= 0 ? 'var(--green)' : 'var(--red)';
+    } else {
+      valDiff.textContent = '—';
+      valDiff.style.color = '';
+    }
+  }
+
+  function renderSignalHistory() {
+    if (signalHistory.length === 0) {
+      signalsList.innerHTML = '<div style="color:var(--text-muted);font-size:11px;">No signals today</div>';
+      return;
+    }
+
+    signalsList.innerHTML = signalHistory.map(s => {
+      const t = s.time;
+      const timeStr = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const arrow = s.direction === 'LONG' ? '▲' : '▼';
+      return `
+        <div class="last-sig-item">
+          <span class="sig-dir ${s.direction.toLowerCase()}">${arrow} ${s.direction}</span>
+          <span class="sig-time">${timeStr} · $${s.price.toFixed(2)}</span>
+        </div>`;
+    }).join('');
+  }
+
+  // ─── STATUS ───────────────────────────────────────────────────
+  function setStatus(msg, type = '') {
+    statusBar.textContent = msg;
+    statusBar.className   = type;
+  }
+
+  function showLoading(msg = 'Loading chart data…') {
+    loadingText.textContent = msg;
+    loadingEl.classList.remove('hidden');
+  }
+
+  function hideLoading() {
+    loadingEl.classList.add('hidden');
+  }
+
+  // ─── MAIN LOAD FLOW ───────────────────────────────────────────
+  async function loadSymbol() {
+    const sym = tickerInput.value.trim().toUpperCase();
+    if (!sym) return;
+
+    currentSymbol = sym;
+    loadBtn.disabled = true;
+    showLoading(`Fetching ${sym} data…`);
+    setStatus(`Fetching ${sym}…`);
+
+    try {
+      const { bars, symbol } = await fetchData(sym);
+      renderChart(bars);
+      setStatus(`${symbol} · ${bars.length} bars · updated ${new Date().toLocaleTimeString()}`, 'ok');
+      scheduleRefresh();
+    } catch (err) {
+      console.error(err);
+      const msg = err.message || 'Unknown error';
+      setStatus(`Error: ${msg}. Check ticker or network.`, 'error');
+      loadingText.textContent = `Failed to load data.\n${msg}`;
+      // Don't hide loading overlay so error is visible; hide after 4s
+      setTimeout(hideLoading, 4000);
+    } finally {
+      loadBtn.disabled = false;
+    }
+  }
+
+  // ─── AUTO-REFRESH ─────────────────────────────────────────────
+  function scheduleRefresh() {
+    clearTimeout(refreshTimer);
+    let countdown = REFRESH_MS / 1000;
+
+    const tick = () => {
+      refreshInfo.textContent = `Auto-refresh in ${countdown}s`;
+      countdown--;
+      if (countdown < 0) {
+        refreshInfo.textContent = 'Refreshing…';
+        silentRefresh();
+      } else {
+        refreshTimer = setTimeout(tick, 1000);
+      }
+    };
+    refreshTimer = setTimeout(tick, 1000);
+  }
+
+  async function silentRefresh() {
+    try {
+      const { bars, symbol } = await fetchData(currentSymbol);
+      renderChart(bars);
+      setStatus(`${symbol} · ${bars.length} bars · updated ${new Date().toLocaleTimeString()}`, 'ok');
+    } catch (err) {
+      setStatus(`Refresh error: ${err.message}`, 'error');
+    }
+    scheduleRefresh();
+  }
+
+  // ─── KEYBOARD SHORTCUT ────────────────────────────────────────
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && document.activeElement === tickerInput) {
+      loadSymbol();
+    }
+  });
+
+  // ─── BOOT ─────────────────────────────────────────────────────
+  initChart();
+  loadSymbol();
+
+})();
+</script>
+</body>
+</html>
