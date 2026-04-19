@@ -263,7 +263,7 @@
         // Fetch data from Yahoo Finance
         const endDate = Math.floor(Date.now() / 1000);
         const startDate = endDate - (6 * 30 * 24 * 3600); // 6 months back (approx)
-        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${SYMBOL}?interval=5m&period1=${startDate}&period2=${endDate}`;
+        const url = `https://ema-vwap-proxy.clawd-mendez.workers.dev/?symbol=${SYMBOL}&interval=5m&range=60d`;
 
         const res = await fetch(url);
         const data = await res.json();
