@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arturo's 9 EMA vs VWAP — Backtest (6m)</title>
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0f14;
+      --surface:   #151820;
+      --border:    #1e2330;
+      --text:      #c9d1e0;
+      --text-muted:#6b7a99;
+      --accent:    #3d7eff;
+      --green:     #26a69a;
+      --red:       #ef5350;
+      --orange:    #ff9800;
+      --blue:      #42a5f5;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 13px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h1 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #e8eaf0;
+      letter-spacing: 0.5px;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 16px;
+    }
+
+    .nav-links a {
+      color: var(--blue);
+      text-decoration: none;
+      font-size: 12px;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      transition: all 0.2s;
+    }
+
+    .nav-links a:hover {
+      background: var(--border);
+      color: white;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: auto;
+      padding: 20px;
+      gap: 20px;
+    }
+
+    .loading {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 40px;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 16px;
+    }
+
+    .section h2 {
+      font-size: 14px;
+      margin-bottom: 12px;
+      color: #e8eaf0;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
+
+    .stat-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 12px;
+      border-radius: 3px;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: #e8eaf0;
+      font-family: 'Courier New', monospace;
+    }
+
+    .stat-value.positive { color: var(--green); }
+    .stat-value.negative { color: var(--red); }
+
+    #equity-chart {
+      width: 100%;
+      height: 300px;
+    }
+
+    .trade-log {
+      max-height: 400px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+    }
+
+    .trade-log table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .trade-log th {
+      position: sticky;
+      top: 0;
+      background: var(--border);
+      padding: 8px;
+      text-align: left;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .trade-log td {
+      padding: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .trade-log tr.win { background: rgba(38, 166, 154, 0.05); }
+    .trade-log tr.loss { background: rgba(239, 83, 80, 0.05); }
+
+    .trade-log .symbol { font-weight: 600; }
+    .trade-log .win-val { color: var(--green); }
+    .trade-log .loss-val { color: var(--red); }
+
+    .error {
+      background: rgba(239, 83, 80, 0.1);
+      border: 1px solid var(--red);
+      color: var(--red);
+      padding: 12px;
+      border-radius: 4px;
+      margin: 20px;
+    }
+
+    @media (max-width: 768px) {
+      main { padding: 12px; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      #equity-chart { height: 200px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Arturo's 9 EMA vs VWAP — Backtest (6m ES)</h1>
+    <div class="nav-links">
+      <a href="index.html">← Live Signals</a>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>Loading 6 months of ES=F data...</p>
+    </div>
+  </main>
+
+  <script>
+    const SYMBOL = 'ES=F';
+    const PERIOD_EMA = 9;
+
+    // Calculate EMA
+    function calculateEMA(prices, period) {
+      const ema = [];
+      const multiplier = 2 / (period + 1);
+      let sma = prices.slice(0, period).reduce((a, b) => a + b, 0) / period;
+      ema[period - 1] = sma;
+
+      for (let i = period; i < prices.length; i++) {
+        sma = (prices[i] - sma) * multiplier + sma;
+        ema[i] = sma;
+      }
+      return ema;
+    }
+
+    // Calculate VWAP (daily reset)
+    function calculateVWAP(candles) {
+      const vwap = new Array(candles.length);
+      let dayStart = 0;
+
+      for (let i = 0; i < candles.length; i++) {
+        const time = new Date(candles[i].time * 1000);
+        const nextTime = i + 1 < candles.length ? new Date(candles[i + 1].time * 1000) : null;
+
+        // Check if next candle is a new day
+        if (nextTime && time.toDateString() !== nextTime.toDateString()) {
+          dayStart = i + 1;
+        }
+
+        const dayCandles = candles.slice(dayStart, i + 1);
+        let cumVol = 0, cumTP = 0;
+        dayCandles.forEach(c => {
+          const tp = (c.high + c.low + c.close) / 3;
+          cumVol += c.volume || 1;
+          cumTP += tp * (c.volume || 1);
+        });
+        vwap[i] = cumTP / cumVol;
+      }
+      return vwap;
+    }
+
+    // Run backtest
+    async function runBacktest() {
+      try {
+        // Fetch data from Yahoo Finance
+        const endDate = Math.floor(Date.now() / 1000);
+        const startDate = endDate - (6 * 30 * 24 * 3600); // 6 months back (approx)
+        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${SYMBOL}?interval=5m&period1=${startDate}&period2=${endDate}`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!data.chart.result?.[0]) throw new Error('No data returned');
+
+        const result = data.chart.result[0];
+        const candles = [];
+        const timestamps = result.timestamp || [];
+        const opens = result.indicators.quote[0].open || [];
+        const highs = result.indicators.quote[0].high || [];
+        const lows = result.indicators.quote[0].low || [];
+        const closes = result.indicators.quote[0].close || [];
+        const volumes = result.indicators.quote[0].volume || [];
+
+        for (let i = 0; i < timestamps.length; i++) {
+          if (opens[i] && closes[i]) {
+            candles.push({
+              time: timestamps[i],
+              open: opens[i],
+              high: highs[i] || Math.max(opens[i], closes[i]),
+              low: lows[i] || Math.min(opens[i], closes[i]),
+              close: closes[i],
+              volume: volumes[i] || 1
+            });
+          }
+        }
+
+        if (candles.length < PERIOD_EMA) throw new Error('Not enough data');
+
+        // Calculate indicators
+        const closes = candles.map(c => c.close);
+        const ema = calculateEMA(closes, PERIOD_EMA);
+        const vwap = calculateVWAP(candles);
+
+        // Run backtest
+        const trades = [];
+        let inPosition = null;
+
+        for (let i = PERIOD_EMA; i < candles.length; i++) {
+          const prevEmaAbove = ema[i - 1] > vwap[i - 1];
+          const currEmaAbove = ema[i] > vwap[i];
+
+          if (!inPosition) {
+            // Check for entry
+            if (!prevEmaAbove && currEmaAbove) {
+              // LONG signal
+              inPosition = { dir: 'LONG', entryIdx: i, entryPrice: candles[i].open };
+            } else if (prevEmaAbove && !currEmaAbove) {
+              // SHORT signal
+              inPosition = { dir: 'SHORT', entryIdx: i, entryPrice: candles[i].open };
+            }
+          } else {
+            // Check for exit
+            const shouldExit = (inPosition.dir === 'LONG' && !currEmaAbove) ||
+                               (inPosition.dir === 'SHORT' && currEmaAbove);
+            if (shouldExit) {
+              const pnl = inPosition.dir === 'LONG' 
+                ? candles[i].open - inPosition.entryPrice
+                : inPosition.entryPrice - candles[i].open;
+              trades.push({
+                dir: inPosition.dir,
+                entryTime: new Date(candles[inPosition.entryIdx].time * 1000),
+                entryPrice: inPosition.entryPrice,
+                exitTime: new Date(candles[i].time * 1000),
+                exitPrice: candles[i].open,
+                pnl,
+                win: pnl > 0
+              });
+              inPosition = null;
+            }
+          }
+        }
+
+        // Calculate stats
+        const stats = {
+          totalTrades: trades.length,
+          wins: trades.filter(t => t.win).length,
+          losses: trades.filter(t => !t.win).length,
+          longs: trades.filter(t => t.dir === 'LONG').length,
+          shorts: trades.filter(t => t.dir === 'SHORT').length,
+          totalPnL: trades.reduce((sum, t) => sum + t.pnl, 0),
+          avgWin: trades.filter(t => t.win).length > 0 
+            ? trades.filter(t => t.win).reduce((sum, t) => sum + t.pnl, 0) / trades.filter(t => t.win).length
+            : 0,
+          avgLoss: trades.filter(t => !t.win).length > 0
+            ? trades.filter(t => !t.win).reduce((sum, t) => sum + t.pnl, 0) / trades.filter(t => !t.win).length
+            : 0,
+          grossWins: trades.filter(t => t.win).reduce((sum, t) => sum + t.pnl, 0),
+          grossLosses: Math.abs(trades.filter(t => !t.win).reduce((sum, t) => sum + t.pnl, 0))
+        };
+
+        stats.winRate = stats.totalTrades > 0 ? (stats.wins / stats.totalTrades * 100).toFixed(1) : 0;
+        stats.profitFactor = stats.grossLosses > 0 ? (stats.grossWins / stats.grossLosses).toFixed(2) : (stats.grossWins > 0 ? '∞' : '0');
+
+        // Calculate equity curve and max drawdown
+        let equity = 0, peak = 0, maxDD = 0;
+        const equityPoints = trades.map(t => {
+          equity += t.pnl;
+          peak = Math.max(peak, equity);
+          maxDD = Math.min(maxDD, equity - peak);
+          return { time: Math.floor(t.exitTime.getTime() / 1000), value: equity };
+        });
+
+        stats.maxDrawdown = Math.abs(maxDD);
+        stats.bestTrade = Math.max(...trades.map(t => t.pnl), 0);
+        stats.worstTrade = Math.min(...trades.map(t => t.pnl), 0);
+
+        renderBacktest(stats, trades, equityPoints, candles);
+      } catch (err) {
+        document.getElementById('main-content').innerHTML = `<div class="error">Error: ${err.message}</div>`;
+      }
+    }
+
+    function renderBacktest(stats, trades, equityPoints, candles) {
+      const html = `
+        <div class="section">
+          <h2>Summary Statistics</h2>
+          <div class="stats-grid">
+            <div class="stat-box">
+              <div class="stat-label">Total Trades</div>
+              <div class="stat-value">${stats.totalTrades}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Win Rate</div>
+              <div class="stat-value ${stats.winRate >= 50 ? 'positive' : 'negative'}">${stats.winRate}%</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Longs / Shorts</div>
+              <div class="stat-value">${stats.longs} / ${stats.shorts}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Total P&L (pts)</div>
+              <div class="stat-value ${stats.totalPnL >= 0 ? 'positive' : 'negative'}">${stats.totalPnL.toFixed(2)}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Avg Win / Loss</div>
+              <div class="stat-value">${stats.avgWin.toFixed(2)} / ${stats.avgLoss.toFixed(2)}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Profit Factor</div>
+              <div class="stat-value">${stats.profitFactor}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Max Drawdown</div>
+              <div class="stat-value negative">-${stats.maxDrawdown.toFixed(2)}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Best / Worst Trade</div>
+              <div class="stat-value"><span class="positive">${stats.bestTrade.toFixed(2)}</span> / <span class="negative">${stats.worstTrade.toFixed(2)}</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>Equity Curve</h2>
+          <div id="equity-chart"></div>
+        </div>
+
+        <div class="section">
+          <h2>Trade Log (${trades.length} trades)</h2>
+          <div class="trade-log">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Dir</th>
+                  <th>Entry Time</th>
+                  <th>Entry</th>
+                  <th>Exit Time</th>
+                  <th>Exit</th>
+                  <th>P&L</th>
+                  <th>Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${trades.map((t, i) => `
+                  <tr class="${t.win ? 'win' : 'loss'}">
+                    <td>${i + 1}</td>
+                    <td class="symbol">${t.dir.slice(0, 1)}</td>
+                    <td>${t.entryTime.toLocaleString()}</td>
+                    <td>${t.entryPrice.toFixed(2)}</td>
+                    <td>${t.exitTime.toLocaleString()}</td>
+                    <td>${t.exitPrice.toFixed(2)}</td>
+                    <td class="${t.win ? 'win-val' : 'loss-val'}">${t.pnl.toFixed(2)}</td>
+                    <td>${t.win ? '✓' : '✗'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+      document.getElementById('main-content').innerHTML = html;
+
+      // Render equity chart
+      if (equityPoints.length > 0) {
+        const chart = LightweightCharts.createChart(document.getElementById('equity-chart'), {
+          layout: { background: { color: '#0d0f14' }, textColor: '#c9d1e0' },
+          grid: { vertLines: { color: '#1e2330' }, horzLines: { color: '#1e2330' } },
+          timeScale: { timeVisible: true }
+        });
+        const lineSeries = chart.addLineSeries({ color: '#42a5f5', lineWidth: 2 });
+        lineSeries.setData(equityPoints);
+        chart.timeScale().fitContent();
+      }
+    }
+
+    runBacktest();
+  </script>
+</body>
+</html>
