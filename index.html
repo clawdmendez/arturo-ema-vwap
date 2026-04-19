@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Arturo's 9 EMA vs VWAP Strategy</title>
+  <title>Arturo's 9 EMA vs VWAP — ES Mini Strategy</title>
   <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -365,7 +365,7 @@
   <span class="header-sep">|</span>
   <form class="ticker-form" id="ticker-form" onsubmit="return false;">
     <label for="ticker-input">Ticker:</label>
-    <input id="ticker-input" type="text" value="SPY" maxlength="10" spellcheck="false" autocomplete="off" />
+    <input id="ticker-input" type="text" value="ES=F" maxlength="10" spellcheck="false" autocomplete="off" />
     <button class="btn" id="load-btn" onclick="loadSymbol()">Load</button>
   </form>
   <div class="refresh-info" id="refresh-info">Auto-refresh every 60s</div>
